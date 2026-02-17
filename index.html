@@ -3,20 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>P2P Arena - Mobile Test</title>
+    <title>P2P Arena - Fixed Controls</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
+        /* Reset total para evitar scroll e comportamentos estranhos no mobile */
         * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; }
         
         body {
-            font-family: 'Segoe UI', sans-serif;
-            background-color: #121212;
-            color: #eee;
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #000;
+            color: #fff;
             overflow: hidden;
             height: 100vh;
             width: 100vw;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
             touch-action: none;
@@ -27,84 +27,78 @@
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
             display: flex; align-items: center; justify-content: center;
-            background: rgba(18, 18, 18, 0.95);
-            z-index: 100;
+            background: #111;
+            z-index: 1000;
         }
 
         .panel {
-            background: #1e1e2f; padding: 30px; border-radius: 12px;
-            text-align: center; width: 320px; border: 1px solid #333;
+            background: #222; padding: 20px; border: 2px solid #444;
+            text-align: center; width: 300px;
         }
 
         input {
-            width: 100%; padding: 12px; margin-bottom: 15px;
-            background: #2a2a40; border: 1px solid #444; color: #fff;
-            border-radius: 6px; text-align: center;
+            width: 100%; padding: 10px; margin-bottom: 10px;
+            background: #000; border: 1px solid #4ecca3; color: #4ecca3;
+            text-align: center; font-family: inherit;
         }
 
-        .btn-group { display: flex; gap: 10px; }
         button {
-            flex: 1; padding: 12px; border: none; border-radius: 6px;
-            font-weight: bold; cursor: pointer; color: #fff;
+            width: 100%; padding: 10px; margin: 5px 0;
+            border: 1px solid #fff; background: #000; color: #fff;
+            font-family: inherit; cursor: pointer;
         }
-        .btn-host { background: #4ecca3; color: #000; }
-        .btn-join { background: #393e46; border: 1px solid #eee; }
+        button:active { background: #4ecca3; color: #000; }
 
-        /* --- GAME --- */
+        /* --- GAME LAYOUT --- */
         #game-wrapper {
             position: relative;
-            width: 100%;
-            height: 100%;
-            display: none; /* Aparece após iniciar */
+            width: 100vw;
+            height: 100vh;
+            display: none;
         }
 
-        canvas { background: #1a1a2e; width: 100%; height: 100%; display: block; }
+        canvas { background: #050505; display: block; width: 100%; height: 100%; }
 
-        /* --- CHAT --- */
+        /* --- CHAT (Compacto estilo RPG) --- */
         #chat-wrapper {
-            position: absolute; top: 10px; right: 10px;
-            width: 200px; height: 120px;
-            background: rgba(0, 0, 0, 0.7);
-            border-radius: 8px; padding: 5px;
-            display: flex; flex-direction: column; z-index: 50;
+            position: absolute; top: 10px; left: 10px;
+            width: 180px; background: rgba(0,0,0,0.8);
+            border: 1px solid #444; padding: 5px; z-index: 100;
         }
-        #chat-history { flex: 1; overflow-y: auto; font-size: 10px; margin-bottom: 5px; }
-        #chat-input { background: #222; border: 1px solid #444; color: #fff; padding: 4px; font-size: 11px; width: 100%; }
+        #chat-history { height: 60px; overflow-y: auto; font-size: 10px; margin-bottom: 4px; border-bottom: 1px solid #333; }
+        #chat-input { width: 100%; background: #000; border: none; color: #fff; font-size: 10px; }
 
-        /* --- CONTROLES MOBILE (Sempre visíveis para teste) --- */
-        #mobile-controls {
+        /* --- CONTROLES VIRTUAIS (Inspirados no seu RPG-RoGueLiKe) --- */
+        .dpad {
             position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
+            bottom: 20px;
+            left: 20px;
+            z-index: 2000; /* Garante que fique acima do canvas */
             display: grid;
-            grid-template-areas: 
-                ". up ."
-                "left . right"
-                ". down .";
-            gap: 10px;
-            z-index: 60;
+            grid-template-columns: repeat(3, 55px);
+            grid-template-rows: repeat(3, 55px);
+            gap: 5px;
         }
 
-        .dpad-btn {
-            width: 65px;
-            height: 65px;
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.4);
-            border-radius: 50%;
+        .ctrl-btn {
+            width: 55px;
+            height: 55px;
+            background: rgba(40, 40, 40, 0.8);
+            border: 1px solid #fff;
+            color: #fff;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 28px;
-            color: white;
+            font-size: 24px;
             user-select: none;
+            cursor: pointer;
         }
 
-        .dpad-btn:active { background: rgba(78, 204, 163, 0.6); border-color: #4ecca3; }
-        .up { grid-area: up; }
-        .down { grid-area: down; }
-        .left { grid-area: left; }
-        .right { grid-area: right; }
+        .ctrl-btn:active { background: #4ecca3; color: #000; }
+        .btn-up { grid-column: 2; grid-row: 1; }
+        .btn-left { grid-column: 1; grid-row: 2; }
+        .btn-down { grid-column: 2; grid-row: 3; }
+        .btn-right { grid-column: 3; grid-row: 2; }
 
     </style>
 </head>
@@ -112,29 +106,27 @@
 
     <div id="ui-layer">
         <div class="panel">
-            <h1>⚔️ P2P Arena</h1>
-            <input type="text" id="room-code" placeholder="Nome da Sala">
-            <div class="btn-group">
-                <button class="btn-host" onclick="Game.init(true)">Criar</button>
-                <button class="btn-join" onclick="Game.init(false)">Entrar</button>
-            </div>
-            <p id="status-msg" style="margin-top:10px; font-size:12px; color: #aaa;">Aguardando...</p>
+            <h2 style="color:#4ecca3; margin-bottom:10px;">P2P ARENA</h2>
+            <input type="text" id="room-code" placeholder="NOME DA SALA">
+            <button onclick="Game.init(true)">CRIAR SALA</button>
+            <button onclick="Game.init(false)">ENTRAR NA SALA</button>
+            <p id="status-msg" style="font-size:10px; margin-top:10px;">AGUARDANDO...</p>
         </div>
     </div>
 
     <div id="game-wrapper">
-        <canvas id="gameCanvas"></canvas>
-        
         <div id="chat-wrapper">
             <div id="chat-history"></div>
-            <input type="text" id="chat-input" placeholder="Chat..." onkeydown="if(event.key==='Enter') Chat.send()">
+            <input type="text" id="chat-input" placeholder="DIGITE E ENTER..." onkeydown="if(event.key==='Enter') Chat.send()">
         </div>
 
-        <div id="mobile-controls">
-            <div class="dpad-btn up" ontouchstart="Input.set('up', true)" ontouchend="Input.set('up', false)" onmousedown="Input.set('up', true)" onmouseup="Input.set('up', false)">↑</div>
-            <div class="dpad-btn left" ontouchstart="Input.set('left', true)" ontouchend="Input.set('left', false)" onmousedown="Input.set('left', true)" onmouseup="Input.set('left', false)">←</div>
-            <div class="dpad-btn right" ontouchstart="Input.set('right', true)" ontouchend="Input.set('right', false)" onmousedown="Input.set('right', true)" onmouseup="Input.set('right', false)">→</div>
-            <div class="dpad-btn down" ontouchstart="Input.set('down', true)" ontouchend="Input.set('down', false)" onmousedown="Input.set('down', true)" onmouseup="Input.set('down', false)">↓</div>
+        <canvas id="gameCanvas"></canvas>
+
+        <div class="dpad">
+            <div class="ctrl-btn btn-up" ontouchstart="Input.set('up', true)" ontouchend="Input.set('up', false)" onmousedown="Input.set('up', true)" onmouseup="Input.set('up', false)">▲</div>
+            <div class="ctrl-btn btn-left" ontouchstart="Input.set('left', true)" ontouchend="Input.set('left', false)" onmousedown="Input.set('left', true)" onmouseup="Input.set('left', false)">◄</div>
+            <div class="ctrl-btn btn-down" ontouchstart="Input.set('down', true)" ontouchend="Input.set('down', false)" onmousedown="Input.set('down', true)" onmouseup="Input.set('down', false)">▼</div>
+            <div class="ctrl-btn btn-right" ontouchstart="Input.set('right', true)" ontouchend="Input.set('right', false)" onmousedown="Input.set('right', true)" onmouseup="Input.set('right', false)">►</div>
         </div>
     </div>
 
@@ -143,22 +135,23 @@
             canvas: document.getElementById('gameCanvas'),
             ctx: document.getElementById('gameCanvas').getContext('2d'),
             peer: null, conn: null,
-            me: { x: 100, y: 100, color: '#4ecca3' },
+            me: { x: 50, y: 50, color: '#4ecca3' },
             enemy: { x: -100, y: -100, color: '#ff6b6b', active: false },
             isHost: false, lastSent: 0,
 
             init(isHost) {
                 const code = document.getElementById('room-code').value.trim();
-                if (!code) return alert("Insira um nome!");
+                if (!code) return alert("DIGITE O NOME DA SALA!");
                 this.isHost = isHost;
-                document.getElementById('status-msg').innerText = "Conectando...";
+                document.getElementById('status-msg').innerText = "CONECTANDO...";
                 
                 this.peer = new Peer(isHost ? code : null);
                 this.peer.on('open', (id) => {
-                    if (isHost) document.getElementById('status-msg').innerText = "Aguardando oponente...";
+                    if (isHost) document.getElementById('status-msg').innerText = "SALA: " + id + " | AGUARDANDO...";
                     else this.connect(code);
                 });
                 this.peer.on('connection', (c) => this.setupConn(c));
+                this.peer.on('error', (err) => alert("ERRO: " + err.type));
             },
 
             connect(targetId) {
@@ -172,8 +165,8 @@
                     document.getElementById('game-wrapper').style.display = 'block';
                     this.resize();
                     if(this.isHost) {
-                        this.me.x = 50; this.me.y = 200;
-                        this.conn.send({type:'start', x: 250, y: 200});
+                        this.me.x = 50; this.me.y = 50;
+                        this.conn.send({type:'start', x: 200, y: 200});
                     }
                     requestAnimationFrame(() => this.loop());
                 });
@@ -192,10 +185,10 @@
             update() {
                 let moved = false;
                 const speed = 5;
-                if(Input.keys.up) { this.me.y -= speed; moved = true; }
-                if(Input.keys.down) { this.me.y += speed; moved = true; }
-                if(Input.keys.left) { this.me.x -= speed; moved = true; }
-                if(Input.keys.right) { this.me.x += speed; moved = true; }
+                if(Input.keys.up && this.me.y > 0) { this.me.y -= speed; moved = true; }
+                if(Input.keys.down && this.me.y < this.canvas.height - 40) { this.me.y += speed; moved = true; }
+                if(Input.keys.left && this.me.x > 0) { this.me.x -= speed; moved = true; }
+                if(Input.keys.right && this.me.x < this.canvas.width - 40) { this.me.x += speed; moved = true; }
 
                 if(moved && Date.now() - this.lastSent > 30) {
                     if(this.conn) this.conn.send({type:'move', x: this.me.x, y: this.me.y});
@@ -204,17 +197,22 @@
             },
 
             draw() {
-                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.ctx.fillStyle = "#050505";
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
                 
-                // Desenha Inimigo
+                // Desenhar Inimigo
                 if(this.enemy.active) {
                     this.ctx.fillStyle = this.enemy.color;
                     this.ctx.fillRect(this.enemy.x, this.enemy.y, 40, 40);
+                    this.ctx.strokeStyle = "#fff";
+                    this.ctx.strokeRect(this.enemy.x, this.enemy.y, 40, 40);
                 }
                 
-                // Desenha Eu
+                // Desenhar Eu
                 this.ctx.fillStyle = this.me.color;
                 this.ctx.fillRect(this.me.x, this.me.y, 40, 40);
+                this.ctx.strokeStyle = "#fff";
+                this.ctx.strokeRect(this.me.x, this.me.y, 40, 40);
             },
 
             loop() {
@@ -226,7 +224,11 @@
 
         const Input = {
             keys: { up: false, down: false, left: false, right: false },
-            set(dir, state) { this.keys[dir] = state; }
+            set(dir, state) { 
+                this.keys[dir] = state; 
+                // Evita que o toque no botão dispare scroll no mobile
+                if(window.event) window.event.preventDefault();
+            }
         };
 
         const Chat = {
@@ -246,6 +248,20 @@
         };
 
         window.addEventListener('resize', () => Game.resize());
+        
+        // Teclado também funciona para teste no PC
+        window.addEventListener('keydown', (e) => {
+            if(e.key === 'ArrowUp' || e.key === 'w') Input.keys.up = true;
+            if(e.key === 'ArrowDown' || e.key === 's') Input.keys.down = true;
+            if(e.key === 'ArrowLeft' || e.key === 'a') Input.keys.left = true;
+            if(e.key === 'ArrowRight' || e.key === 'd') Input.keys.right = true;
+        });
+        window.addEventListener('keyup', (e) => {
+            if(e.key === 'ArrowUp' || e.key === 'w') Input.keys.up = false;
+            if(e.key === 'ArrowDown' || e.key === 's') Input.keys.down = false;
+            if(e.key === 'ArrowLeft' || e.key === 'a') Input.keys.left = false;
+            if(e.key === 'ArrowRight' || e.key === 'd') Input.keys.right = false;
+        });
     </script>
 </body>
 </html>
