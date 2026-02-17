@@ -1,267 +1,358 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>P2P Arena - Fixed Controls</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <style>
-        /* Reset total para evitar scroll e comportamentos estranhos no mobile */
-        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; }
-        
-        body {
-            font-family: 'Courier New', Courier, monospace;
-            background-color: #000;
-            color: #fff;
-            overflow: hidden;
-            height: 100vh;
-            width: 100vw;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            touch-action: none;
-        }
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>RPGLiKe — Legacy Edition</title>
+<style>
+  :root {
+    --bg: #0c0c0c; --panel: #161616; --border: #333;
+    --player: #44ff44; --enemy: #ff5555; --item: #ffff55;
+    --stairs: #55ffff; --text: #dddddd;
+  }
+  * { box-sizing: border-box; touch-action: manipulation; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'Courier New', Courier, monospace;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
 
-        /* --- LOBBY --- */
-        #ui-layer {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; align-items: center; justify-content: center;
-            background: #111;
-            z-index: 1000;
-        }
+  /* --- TELAS --- */
+  .screen {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; background: var(--bg); z-index: 10;
+  }
+  .hidden { display: none !important; }
 
-        .panel {
-            background: #222; padding: 20px; border: 2px solid #444;
-            text-align: center; width: 300px;
-        }
+  /* --- UI JOGO --- */
+  #game-ui { display: flex; flex-direction: column; width: 100%; height: 100%; padding: 8px; }
+  
+  #stats-bar {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;
+    background: var(--panel); border: 2px solid var(--border);
+    padding: 8px; font-size: 11px; margin-bottom: 5px;
+  }
+  .stat-val { display: block; font-weight: bold; color: #fff; font-size: 13px; }
 
-        input {
-            width: 100%; padding: 10px; margin-bottom: 10px;
-            background: #000; border: 1px solid #4ecca3; color: #4ecca3;
-            text-align: center; font-family: inherit;
-        }
+  #msg-log {
+    height: 40px; background: #000; padding: 5px; font-size: 12px;
+    border: 1px solid #222; margin-bottom: 5px; color: #aaa; overflow: hidden;
+  }
 
-        button {
-            width: 100%; padding: 10px; margin: 5px 0;
-            border: 1px solid #fff; background: #000; color: #fff;
-            font-family: inherit; cursor: pointer;
-        }
-        button:active { background: #4ecca3; color: #000; }
+  /* --- MAPA --- */
+  #map-view {
+    flex: 1; background: #000; border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  #ascii-map { white-space: pre; line-height: 1.2; font-size: 3.8vw; font-weight: bold; }
+  @media (min-width: 600px) { #ascii-map { font-size: 16px; } }
 
-        /* --- GAME LAYOUT --- */
-        #game-wrapper {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            display: none;
-        }
+  /* Estilos das Entidades (Sem Neon) */
+  .p { color: var(--player); }
+  .e { color: var(--enemy); }
+  .i { color: var(--item); }
+  .s { color: var(--stairs); }
+  .w { color: #444; }
+  .f { color: #222; }
 
-        canvas { background: #050505; display: block; width: 100%; height: 100%; }
+  /* --- CONTROLES --- */
+  #controls {
+    height: 170px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 10px;
+    padding: 10px; background: var(--panel); border-top: 2px solid var(--border);
+  }
+  .dpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .btn {
+    background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; font-size: 20px;
+  }
+  .btn:active { background: #444; transform: translateY(2px); }
+  .actions { display: flex; flex-direction: column; gap: 8px; }
+  .btn-act { flex: 1; font-size: 14px; font-weight: bold; text-transform: uppercase; }
 
-        /* --- CHAT (Compacto estilo RPG) --- */
-        #chat-wrapper {
-            position: absolute; top: 10px; left: 10px;
-            width: 180px; background: rgba(0,0,0,0.8);
-            border: 1px solid #444; padding: 5px; z-index: 100;
-        }
-        #chat-history { height: 60px; overflow-y: auto; font-size: 10px; margin-bottom: 4px; border-bottom: 1px solid #333; }
-        #chat-input { width: 100%; background: #000; border: none; color: #fff; font-size: 10px; }
+  /* Animação Satisfatória */
+  .shake { animation: shake 0.2s ease-in-out; }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
 
-        /* --- CONTROLES VIRTUAIS (Inspirados no seu RPG-RoGueLiKe) --- */
-        .dpad {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            z-index: 2000; /* Garante que fique acima do canvas */
-            display: grid;
-            grid-template-columns: repeat(3, 55px);
-            grid-template-rows: repeat(3, 55px);
-            gap: 5px;
-        }
-
-        .ctrl-btn {
-            width: 55px;
-            height: 55px;
-            background: rgba(40, 40, 40, 0.8);
-            border: 1px solid #fff;
-            color: #fff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            user-select: none;
-            cursor: pointer;
-        }
-
-        .ctrl-btn:active { background: #4ecca3; color: #000; }
-        .btn-up { grid-column: 2; grid-row: 1; }
-        .btn-left { grid-column: 1; grid-row: 2; }
-        .btn-down { grid-column: 2; grid-row: 3; }
-        .btn-right { grid-column: 3; grid-row: 2; }
-
-    </style>
+  button { cursor: pointer; font-family: monospace; }
+</style>
 </head>
 <body>
 
-    <div id="ui-layer">
-        <div class="panel">
-            <h2 style="color:#4ecca3; margin-bottom:10px;">P2P ARENA</h2>
-            <input type="text" id="room-code" placeholder="NOME DA SALA">
-            <button onclick="Game.init(true)">CRIAR SALA</button>
-            <button onclick="Game.init(false)">ENTRAR NA SALA</button>
-            <p id="status-msg" style="font-size:10px; margin-top:10px;">AGUARDANDO...</p>
-        </div>
+<div id="scr-menu" class="screen">
+  <h1 style="font-size: 2.5rem; letter-spacing: 5px;">RPGLiKe</h1>
+  <p style="color: #666;">Legacy Mechanics • Modern Feel</p>
+  <button onclick="game.start()" style="padding: 15px 40px; background: var(--player); border: none; font-weight: bold; margin-top: 20px;">INICIAR</button>
+</div>
+
+<div id="scr-game" class="screen hidden">
+  <div id="game-ui">
+    <div id="stats-bar">
+      <div>HP <span id="u-hp" class="stat-val">100</span></div>
+      <div>LVL <span id="u-lvl" class="stat-val">1</span></div>
+      <div>ANDAR <span id="u-flr" class="stat-val">1</span></div>
+      <div>OURO <span id="u-gld" class="stat-val">0</span></div>
+    </div>
+    
+    <div id="msg-log">Inicie sua jornada...</div>
+
+    <div id="map-view">
+      <div id="ascii-map"></div>
     </div>
 
-    <div id="game-wrapper">
-        <div id="chat-wrapper">
-            <div id="chat-history"></div>
-            <input type="text" id="chat-input" placeholder="DIGITE E ENTER..." onkeydown="if(event.key==='Enter') Chat.send()">
-        </div>
-
-        <canvas id="gameCanvas"></canvas>
-
-        <div class="dpad">
-            <div class="ctrl-btn btn-up" ontouchstart="Input.set('up', true)" ontouchend="Input.set('up', false)" onmousedown="Input.set('up', true)" onmouseup="Input.set('up', false)">▲</div>
-            <div class="ctrl-btn btn-left" ontouchstart="Input.set('left', true)" ontouchend="Input.set('left', false)" onmousedown="Input.set('left', true)" onmouseup="Input.set('left', false)">◄</div>
-            <div class="ctrl-btn btn-down" ontouchstart="Input.set('down', true)" ontouchend="Input.set('down', false)" onmousedown="Input.set('down', true)" onmouseup="Input.set('down', false)">▼</div>
-            <div class="ctrl-btn btn-right" ontouchstart="Input.set('right', true)" ontouchend="Input.set('right', false)" onmousedown="Input.set('right', true)" onmouseup="Input.set('right', false)">►</div>
-        </div>
+    <div id="controls">
+      <div class="dpad">
+        <div style="grid-column:2"><button class="btn" id="b-u">▲</button></div>
+        <button class="btn" id="b-l">◄</button>
+        <button class="btn" id="b-d">▼</button>
+        <button class="btn" id="b-r">►</button>
+      </div>
+      <div class="actions">
+        <button class="btn btn-act" id="b-atk" style="border-left: 4px solid var(--enemy)">ATACAR</button>
+        <button class="btn btn-act" id="b-sho" style="border-left: 4px solid #fff">ATIRAR (<span id="u-arw">0</span>)</button>
+      </div>
     </div>
+  </div>
+</div>
 
-    <script>
-        const Game = {
-            canvas: document.getElementById('gameCanvas'),
-            ctx: document.getElementById('gameCanvas').getContext('2d'),
-            peer: null, conn: null,
-            me: { x: 50, y: 50, color: '#4ecca3' },
-            enemy: { x: -100, y: -100, color: '#ff6b6b', active: false },
-            isHost: false, lastSent: 0,
+<script>
+const game = {
+  W: 30, H: 18,
+  player: { hp: 100, mHp: 100, dmg: 10, def: 0, lvl: 1, xp: 0, nXp: 50, flr: 1, gld: 0, arw: 3, x: 0, y: 0, f: [1, 0] },
+  enemies: [], items: [], projs: [], map: [], rooms: [],
+  
+  enemyDefs: [
+    { s: 'Z', n: 'Zumbi', hp: 24, dmg: 6, xp: 14, g: [3,8] },
+    { s: 'S', n: 'Slime', hp: 34, dmg: 9, xp: 20, g: [4,9] },
+    { s: 'G', n: 'Goblin', hp: 20, dmg: 7, xp: 18, g: [6,12] },
+    { s: 'O', n: 'Ogro', hp: 55, dmg: 15, xp: 35, g: [10,18] },
+    { s: 'M', n: 'Mago', hp: 26, dmg: 11, xp: 26, g: [7,14] },
+    { s: 'K', n: 'Cavaleiro', hp: 45, dmg: 12, xp: 30, g: [9,16], arm: 2 }
+  ],
 
-            init(isHost) {
-                const code = document.getElementById('room-code').value.trim();
-                if (!code) return alert("DIGITE O NOME DA SALA!");
-                this.isHost = isHost;
-                document.getElementById('status-msg').innerText = "CONECTANDO...";
-                
-                this.peer = new Peer(isHost ? code : null);
-                this.peer.on('open', (id) => {
-                    if (isHost) document.getElementById('status-msg').innerText = "SALA: " + id + " | AGUARDANDO...";
-                    else this.connect(code);
-                });
-                this.peer.on('connection', (c) => this.setupConn(c));
-                this.peer.on('error', (err) => alert("ERRO: " + err.type));
-            },
+  init() {
+    const bind = (id, fn) => {
+      const el = document.getElementById(id);
+      el.onmousedown = el.ontouchstart = (e) => { e.preventDefault(); fn(); };
+    };
+    bind('b-u', () => this.handleIn('w')); bind('b-d', () => this.handleIn('s'));
+    bind('b-l', () => this.handleIn('a')); bind('b-r', () => this.handleIn('d'));
+    bind('b-atk', () => this.handleIn(' ')); bind('b-sho', () => this.handleIn('f'));
+    window.onkeydown = (e) => this.handleIn(e.key);
+  },
 
-            connect(targetId) {
-                this.setupConn(this.peer.connect(targetId));
-            },
+  start() {
+    document.getElementById('scr-menu').classList.add('hidden');
+    document.getElementById('scr-game').classList.remove('hidden');
+    this.genFloor();
+    this.loop();
+  },
 
-            setupConn(c) {
-                this.conn = c;
-                this.conn.on('open', () => {
-                    document.getElementById('ui-layer').style.display = 'none';
-                    document.getElementById('game-wrapper').style.display = 'block';
-                    this.resize();
-                    if(this.isHost) {
-                        this.me.x = 50; this.me.y = 50;
-                        this.conn.send({type:'start', x: 200, y: 200});
-                    }
-                    requestAnimationFrame(() => this.loop());
-                });
-                this.conn.on('data', (data) => {
-                    if(data.type === 'start') { this.me.x = data.x; this.me.y = data.y; }
-                    if(data.type === 'move') { this.enemy.x = data.x; this.enemy.y = data.y; this.enemy.active = true; }
-                    if(data.type === 'chat') Chat.add(data.msg, 'enemy');
-                });
-            },
+  genFloor() {
+    this.map = Array.from({length:this.H}, () => Array(this.W).fill('#'));
+    this.rooms = []; this.enemies = []; this.items = []; this.projs = [];
+    
+    // Salas
+    for(let i=0; i<6; i++){
+      let w = this.r(5,9), h = this.r(4,7);
+      let x = this.r(1, this.W-w-1), y = this.r(1, this.H-h-1);
+      if(this.map[y][x] === '#'){
+        for(let yy=y; yy<y+h; yy++) for(let xx=x; xx<x+w; xx++) this.map[yy][xx] = '.';
+        this.rooms.push({cx: x+Math.floor(w/2), cy: y+Math.floor(h/2)});
+      }
+    }
+    // Corredores
+    for(let i=1; i<this.rooms.length; i++){
+      let x = this.rooms[i-1].cx, y = this.rooms[i-1].cy;
+      while(x !== this.rooms[i].cx){ this.map[y][x] = '.'; x += (x < this.rooms[i].cx ? 1 : -1); }
+      while(y !== this.rooms[i].cy){ this.map[y][x] = '.'; y += (y < this.rooms[i].cy ? 1 : -1); }
+    }
 
-            resize() {
-                this.canvas.width = window.innerWidth;
-                this.canvas.height = window.innerHeight;
-            },
+    this.player.x = this.rooms[0].cx; this.player.y = this.rooms[0].cy;
+    this.map[this.rooms[this.rooms.length-1].cy][this.rooms[this.rooms.length-1].cx] = '<';
+    if(Math.random() > 0.5) this.map[this.rooms[1].cy][this.rooms[1].cx] = 'T';
 
-            update() {
-                let moved = false;
-                const speed = 5;
-                if(Input.keys.up && this.me.y > 0) { this.me.y -= speed; moved = true; }
-                if(Input.keys.down && this.me.y < this.canvas.height - 40) { this.me.y += speed; moved = true; }
-                if(Input.keys.left && this.me.x > 0) { this.me.x -= speed; moved = true; }
-                if(Input.keys.right && this.me.x < this.canvas.width - 40) { this.me.x += speed; moved = true; }
+    // Inimigos e Itens (Escalonamento V1)
+    const scale = 1 + (this.player.flr - 1) * 0.18;
+    this.rooms.forEach((rm, idx) => {
+      if(idx === 0) return;
+      const def = this.enemyDefs[this.r(0, this.enemyDefs.length-1)];
+      this.enemies.push({ 
+        ...def, x: rm.cx, y: rm.cy, 
+        hp: Math.floor(def.hp * scale), dmg: Math.floor(def.dmg * scale),
+        arm: def.arm ? Math.floor(def.arm + (this.player.flr-1)*0.4) : 0
+      });
+      if(Math.random() > 0.7) this.items.push({x:rm.cx+1, y:rm.cy, t: Math.random() > 0.5 ? 'P' : 'A'});
+    });
+    this.draw();
+  },
 
-                if(moved && Date.now() - this.lastSent > 30) {
-                    if(this.conn) this.conn.send({type:'move', x: this.me.x, y: this.me.y});
-                    this.lastSent = Date.now();
-                }
-            },
+  handleIn(k) {
+    let dx = 0, dy = 0;
+    if(k === 'w' || k === 'ArrowUp') dy = -1;
+    if(k === 's' || k === 'ArrowDown') dy = 1;
+    if(k === 'a' || k === 'ArrowLeft') dx = -1;
+    if(k === 'd' || k === 'ArrowRight') dx = 1;
 
-            draw() {
-                this.ctx.fillStyle = "#050505";
-                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-                
-                // Desenhar Inimigo
-                if(this.enemy.active) {
-                    this.ctx.fillStyle = this.enemy.color;
-                    this.ctx.fillRect(this.enemy.x, this.enemy.y, 40, 40);
-                    this.ctx.strokeStyle = "#fff";
-                    this.ctx.strokeRect(this.enemy.x, this.enemy.y, 40, 40);
-                }
-                
-                // Desenhar Eu
-                this.ctx.fillStyle = this.me.color;
-                this.ctx.fillRect(this.me.x, this.me.y, 40, 40);
-                this.ctx.strokeStyle = "#fff";
-                this.ctx.strokeRect(this.me.x, this.me.y, 40, 40);
-            },
+    if(dx || dy) {
+      this.player.f = [dx, dy];
+      const nx = this.player.x + dx, ny = this.player.y + dy;
+      const en = this.enemies.find(e => e.x === nx && e.y === ny);
+      if(en) this.combat(en);
+      else if(this.canGo(nx, ny)) {
+        this.player.x = nx; this.player.y = ny;
+        this.checkTile(nx, ny);
+      }
+    }
+    if(k === ' ') this.meleeAtk();
+    if(k === 'f') this.shoot();
+    this.draw();
+  },
 
-            loop() {
-                this.update();
-                this.draw();
-                requestAnimationFrame(() => this.loop());
-            }
-        };
+  canGo(x, y) { return x>=0 && y>=0 && x<this.W && y<this.H && this.map[y][x] !== '#'; },
 
-        const Input = {
-            keys: { up: false, down: false, left: false, right: false },
-            set(dir, state) { 
-                this.keys[dir] = state; 
-                // Evita que o toque no botão dispare scroll no mobile
-                if(window.event) window.event.preventDefault();
-            }
-        };
+  combat(en) {
+    const d = Math.max(1, this.player.dmg + this.r(0,4) - (en.arm||0));
+    en.hp -= d;
+    this.log(`Você bateu no ${en.s}: -${d}HP`);
+    if(en.hp <= 0) this.kill(en);
+    else this.enemyAtk(en);
+    this.shake();
+  },
 
-        const Chat = {
-            send() {
-                const el = document.getElementById('chat-input');
-                const msg = el.value.trim();
-                if(!msg) return;
-                this.add(msg, 'me');
-                if(Game.conn) Game.conn.send({type:'chat', msg: msg});
-                el.value = '';
-            },
-            add(msg, sender) {
-                const h = document.getElementById('chat-history');
-                h.innerHTML += `<div><b style="color:${sender==='me'?'#4ecca3':'#ff6b6b'}">${sender}:</b> ${msg}</div>`;
-                h.scrollTop = h.scrollHeight;
-            }
-        };
+  enemyAtk(en) {
+    const d = Math.max(1, en.dmg - this.player.def);
+    this.player.hp -= d;
+    this.log(`${en.n} revidou: -${d}HP`, '#f55');
+    if(this.player.hp <= 0) location.reload();
+  },
 
-        window.addEventListener('resize', () => Game.resize());
-        
-        // Teclado também funciona para teste no PC
-        window.addEventListener('keydown', (e) => {
-            if(e.key === 'ArrowUp' || e.key === 'w') Input.keys.up = true;
-            if(e.key === 'ArrowDown' || e.key === 's') Input.keys.down = true;
-            if(e.key === 'ArrowLeft' || e.key === 'a') Input.keys.left = true;
-            if(e.key === 'ArrowRight' || e.key === 'd') Input.keys.right = true;
+  kill(en) {
+    this.log(`Derrotou ${en.n}!`, '#4f4');
+    this.player.gld += this.r(en.g[0], en.g[1]) + Math.floor(this.player.flr/2);
+    this.enemies = this.enemies.filter(e => e !== en);
+    this.gainXp(en.xp);
+  },
+
+  gainXp(v) {
+    this.player.xp += v;
+    if(this.player.xp >= this.player.nXp) {
+      this.player.lvl++; this.player.xp = 0;
+      this.player.nXp = Math.floor(this.player.nXp * 1.4);
+      this.player.mHp += 15; this.player.hp = this.player.mHp;
+      this.player.dmg += 2;
+      this.log(`LEVEL UP! Nível ${this.player.lvl}`, '#5ff');
+    }
+  },
+
+  shoot() {
+    if(this.player.arw <= 0) return this.log("Sem flechas!");
+    this.player.arw--;
+    this.projs.push({ x: this.player.x, y: this.player.y, dx: this.player.f[0], dy: this.player.f[1] });
+    this.log("Disparou!");
+  },
+
+  meleeAtk() {
+    const en = this.enemies.find(e => Math.abs(e.x - this.player.x) <= 1 && Math.abs(e.y - this.player.y) <= 1);
+    if(en) this.combat(en);
+    else this.log("Ninguém perto.");
+  },
+
+  checkTile(x, y) {
+    const t = this.map[y][x];
+    if(t === '<') { this.player.flr++; this.genFloor(); this.log("Desceu o andar!"); }
+    if(t === 'T') this.shop();
+    const it = this.items.find(i => i.x === x && i.y === y);
+    if(it) {
+      if(it.t === 'P') { this.player.hp = Math.min(this.player.mHp, this.player.hp + 30); this.log("Cura +30HP"); }
+      if(it.t === 'A') { this.player.arw += 5; this.log("Flechas +5"); }
+      this.items = this.items.filter(i => i !== it);
+    }
+  },
+
+  shop() {
+    const menu = "LOJA:\n1)Poção 30hp(10g) 2)Dano+3(20g)\n3)Grande 70hp(25g) 4)MaxHP+10(30g)\n5)Defesa+1(40g) 6)XP+30(15g)\n7)Flechas(18g)";
+    const res = prompt(menu);
+    const p = this.player;
+    if(res === '1' && p.gld >= 10) { p.gld-=10; p.hp=Math.min(p.mHp, p.hp+30); }
+    else if(res === '2' && p.gld >= 20) { p.gld-=20; p.dmg+=3; }
+    else if(res === '3' && p.gld >= 25) { p.gld-=25; p.hp=Math.min(p.mHp, p.hp+70); }
+    else if(res === '4' && p.gld >= 30) { p.gld-=30; p.mHp+=10; p.hp=p.mHp; }
+    else if(res === '5' && p.gld >= 40) { p.gld-=40; p.def+=1; }
+    else if(res === '6' && p.gld >= 15) { p.gld-=15; this.gainXp(30); }
+    else if(res === '7' && p.gld >= 18) { p.gld-=18; p.arw+=8; }
+    else this.log("Compra cancelada ou falta ouro.");
+  },
+
+  loop() {
+    setInterval(() => {
+      // Movimento Projéteis
+      this.projs.forEach((pr, idx) => {
+        pr.x += pr.dx; pr.y += pr.dy;
+        const en = this.enemies.find(e => e.x === pr.x && e.y === pr.y);
+        if(en) { en.hp -= this.player.dmg; this.projs.splice(idx,1); this.log("Acertou flecha!"); }
+        if(!this.canGo(pr.x, pr.y)) this.projs.splice(idx,1);
+      });
+      // IA Inimigos (Mago/Ogro/Simples)
+      if(Math.random() > 0.8) {
+        this.enemies.forEach(e => {
+          if(e.s === 'M' && Math.random() > 0.8) this.log("Mago brilha!", "#b4f"); // Feedback visual mago
+          const dx = Math.sign(this.player.x - e.x), dy = Math.sign(this.player.y - e.y);
+          if(this.canGo(e.x+dx, e.y+dy) && !this.enemies.find(oe=>oe.x===e.x+dx && oe.y===e.y+dy)) {
+            if(e.s === 'O' && Math.random() > 0.5) return; // Ogro é lento
+            e.x += dx; e.y += dy;
+          }
         });
-        window.addEventListener('keyup', (e) => {
-            if(e.key === 'ArrowUp' || e.key === 'w') Input.keys.up = false;
-            if(e.key === 'ArrowDown' || e.key === 's') Input.keys.down = false;
-            if(e.key === 'ArrowLeft' || e.key === 'a') Input.keys.left = false;
-            if(e.key === 'ArrowRight' || e.key === 'd') Input.keys.right = false;
-        });
-    </script>
+      }
+      this.draw();
+    }, 200);
+  },
+
+  draw() {
+    let out = "";
+    for(let y=0; y<this.H; y++) {
+      for(let x=0; x<this.W; x++) {
+        const en = this.enemies.find(e => e.x === x && e.y === y);
+        const it = this.items.find(i => i.x === x && i.y === y);
+        const pr = this.projs.find(p => p.x === x && p.y === y);
+        if(x===this.player.x && y===this.player.y) out += `<span class="p">@</span>`;
+        else if(en) out += `<span class="e">${en.s}</span>`;
+        else if(it) out += `<span class="i">${it.t}</span>`;
+        else if(pr) out += `*`;
+        else {
+          const t = this.map[y][x];
+          if(t==='#') out += `<span class="w">#</span>`;
+          else if(t==='<') out += `<span class="s">&lt;</span>`;
+          else if(t==='T') out += `<span class="i">T</span>`;
+          else out += `<span class="f">.</span>`;
+        }
+      }
+      out += "\n";
+    }
+    document.getElementById('ascii-map').innerHTML = out;
+    document.getElementById('u-hp').innerText = this.player.hp;
+    document.getElementById('u-lvl').innerText = this.player.lvl;
+    document.getElementById('u-flr').innerText = this.player.flr;
+    document.getElementById('u-gld').innerText = this.player.gld;
+    document.getElementById('u-arw').innerText = this.player.arw;
+  },
+
+  log(m, c = "#aaa") {
+    const l = document.getElementById('msg-log');
+    l.innerHTML = `<span style="color:${c}">${m}</span><br>` + l.innerHTML;
+  },
+  shake() {
+    const m = document.getElementById('map-view');
+    m.classList.add('shake');
+    setTimeout(() => m.classList.remove('shake'), 200);
+  },
+  r: (a, b) => Math.floor(Math.random() * (b - a + 1)) + a
+};
+
+game.init();
+</script>
 </body>
 </html>
