@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>P2P Arena - Versão Estável</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        /* --- RESET & BASICS --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #121212;
+            color: #eee;
+            overflow: hidden; /* Vital para mobile */
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: none; /* Impede zoom/scroll nativo */
+        }
+
+        /* --- UI: LOBBY --- */
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(18, 18, 18, 0.95);
+            z-index: 20;
+            transition: opacity 0.5s;
+        }
+
+        .panel {
+            background: #1e1e2f;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            text-align: center;
+            max-width: 90%;
+            width: 350px;
+            border: 1px solid #333;
+        }
+
+        h1 { margin-bottom: 20px; font-size: 24px; color: #fff; }
+        
+        input {
+            width: 100%; padding: 12px; margin-bottom: 15px;
+            background: #2a2a40; border: 1px solid #444; color: #fff;
+            border-radius: 6px; font-size: 16px; text-align: center;
+            text-transform: uppercase;
+        }
+
+        .btn-group { display: flex; gap: 10px; justify-content: center; }
+
+        button {
+            flex: 1; padding: 12px; border: none; border-radius: 6px;
+            font-weight: bold; cursor: pointer; transition: 0.2s;
+            color: #fff; font-size: 14px;
+        }
+
+        .btn-host { background: #4ecca3; color: #000; }
+        .btn-join { background: #393e46; border: 1px solid #eee; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button:active { transform: scale(0.96); }
+
+        #status-msg { margin-top: 15px; font-size: 13px; min-height: 20px; color: #aaa; }
+
+        /* --- GAME: CANVAS --- */
+        canvas {
+            background: #1a1a2e;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            max-width: 100%; max-height: 100%;
+        }
+
+        /* --- UI: CHAT --- */
+        #chat-wrapper {
+            position: absolute; top: 10px; right: 10px;
+            width: 280px; max-width: 50%; height: 180px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 8px; padding: 8px;
+            display: none; flex-direction: column; z-index: 10;
+            pointer-events: auto;
+        }
+
+        #chat-history {
+            flex: 1; overflow-y: auto; font-size: 12px; margin-bottom: 5px;
+            text-shadow: 1px 1px 1px #000;
+        }
+        #chat-history p { margin: 2px 0; word-wrap: break-word; }
+        .sys { color: #ffd700; font-style: italic; }
+        .me { color: #4ecca3; font-weight: bold; }
+        .them { color: #ff6b6b; font-weight: bold; }
+
+        .chat-input-box { display: flex; gap: 5px; }
+        #chat-input { margin: 0; padding: 6px; text-align: left; text-transform: none; }
+        #chat-send { width: 40px; background: #4ecca3; color: #000; padding: 0; }
+
+        /* --- UI: MOBILE CONTROLS --- */
+        #mobile-controls {
+            display: none; position: absolute; bottom: 20px; left: 20px;
+            width: 160px; height: 160px; z-index: 15;
+        }
+        
+        .dpad-row { display: flex; justify-content: center; width: 100%; height: 33%; }
+        .dpad-btn {
+            width: 50px; height: 50px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px; user-select: none;
+        }
+        .dpad-btn:active { background: rgba(78, 204, 163, 0.5); }
+        /* Layout responsivo para garantir visibilidade */
+        @media (max-width: 768px) {
+            #chat-wrapper { width: 200px; height: 140px; opacity: 0.8; }
+            canvas { width: 100%; height: 100%; } /* Fullscreen no mobile */
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div class="panel">
+            <h1>⚔️ P2P Arena</h1>
+            <input type="text" id="room-code" placeholder="Crie um nome para a sala" maxlength="15">
+            <div class="btn-group">
+                <button class="btn-host" onclick="Game.hostRoom()">Criar Sala</button>
+                <button class="btn-join" onclick="Game.joinRoom()">Entrar</button>
+            </div>
+            <p id="status-msg">Pronto para conectar.</p>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="chat-wrapper">
+        <div id="chat-history"></div>
+        <div class="chat-input-box">
+            <input type="text" id="chat-input" placeholder="Mensagem..." onkeydown="if(event.key==='Enter') Chat.send()">
+            <button id="chat-send" onclick="Chat.send()">></button>
+        </div>
+    </div>
+
+    <div id="mobile-controls">
+        <div class="dpad-row">
+            <div class="dpad-btn" ontouchstart="Input.touch('up', true)" ontouchend="Input.touch('up', false)">↑</div>
+        </div>
+        <div class="dpad-row">
+            <div class="dpad-btn" ontouchstart="Input.touch('left', true)" ontouchend="Input.touch('left', false)">←</div>
+            <div style="width:50px"></div>
+            <div class="dpad-btn" ontouchstart="Input.touch('right', true)" ontouchend="Input.touch('right', false)">→</div>
+        </div>
+        <div class="dpad-row">
+            <div class="dpad-btn" ontouchstart="Input.touch('down', true)" ontouchend="Input.touch('down', false)">↓</div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * LÓGICA DO JOGO MULTIPLAYER P2P (PEERJS)
+         * Arquitetura: 
+         * 1. Game: Gerencia estado, loop e renderização.
+         * 2. Net: Gerencia conexão WebRTC e troca de dados.
+         * 3. Input: Gerencia teclado e touch.
+         * 4. Chat: Gerencia mensagens.
+         */
+
+        const Utils = {
+            id: (id) => document.getElementById(id),
+            log: (msg, color='white') => {
+                const el = Utils.id('status-msg');
+                el.innerText = msg;
+                el.style.color = color;
+            },
+            isMobile: () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+        };
+
+        const Config = {
+            speed: 5,
+            playerSize: 40,
+            tickRate: 40 // ms (Enviar dados a cada X ms para não saturar a rede)
+        };
+
+        const State = {
+            me: { x: 0, y: 0, color: '#4ecca3', id: null },
+            enemy: { x: -100, y: -100, color: '#ff6b6b', id: null, connected: false },
+            isHost: false,
+            running: false,
+            lastSent: 0
+        };
+
+        // --- 1. NETWORKING (REDE) ---
+        const Net = {
+            peer: null,
+            conn: null,
+
+            init: (id = null) => {
+                // Se id for null, PeerJS gera um aleatório. Se for string, tenta usar ela.
+                Net.peer = new Peer(id, { debug: 1 });
+
+                Net.peer.on('open', (myId) => {
+                    State.me.id = myId;
+                    if (State.isHost) {
+                        Utils.log(`Sala criada! ID: ${myId}. Aguardando...`, '#4ecca3');
+                        Game.waitForOpponent();
+                    }
+                });
+
+                Net.peer.on('error', (err) => {
+                    console.error(err);
+                    if (err.type === 'unavailable-id') Utils.log("Nome da sala já existe!", "red");
+                    else if (err.type === 'peer-unavailable') Utils.log("Sala não encontrada!", "red");
+                    else Utils.log("Erro de conexão: " + err.type, "red");
+                    Game.resetUI();
+                });
+            },
+
+            connectTo: (hostId) => {
+                if (!Net.peer) return;
+                Utils.log("Tentando conectar...", "yellow");
+                
+                // Timeout de segurança se a sala não responder
+                const connTimeout = setTimeout(() => {
+                    if (!State.running) {
+                        Utils.log("Tempo esgotado. Verifique o ID.", "orange");
+                        Game.resetUI();
+                    }
+                }, 8000);
+
+                const conn = Net.peer.connect(hostId);
+                
+                conn.on('open', () => {
+                    clearTimeout(connTimeout);
+                    Net.setupConnection(conn);
+                });
+
+                conn.on('error', () => {
+                    clearTimeout(connTimeout);
+                    Utils.log("Erro ao conectar.", "red");
+                });
+            },
+
+            setupConnection: (connection) => {
+                Net.conn = connection;
+
+                // Recebendo dados
+                Net.conn.on('data', (data) => {
+                    Game.handlePacket(data);
+                });
+
+                Net.conn.on('close', () => {
+                    alert("O oponente desconectou!");
+                    location.reload();
+                });
+
+                // Se eu sou o Host e conectou alguém
+                if (State.isHost) {
+                     // Verifica se já tem alguém (segurança básica)
+                     if (Net.peer.connections[State.me.id] && Net.peer.connections[State.me.id].length > 1) {
+                        connection.send({ type: 'full' });
+                        setTimeout(() => connection.close(), 500);
+                        return;
+                    }
+
+                    Utils.log("Jogador entrou! Iniciando...", "#4ecca3");
+                    // Host define as posições iniciais e manda start
+                    State.me.x = 50; State.me.y = 300;
+                    State.enemy.x = 700; State.enemy.y = 300;
+                    
+                    setTimeout(() => {
+                        Net.send({ type: 'start', startX: 700, startY: 300 }); // O inimigo começa no 700
+                        Game.start();
+                    }, 1000);
+                }
+            },
+
+            send: (data) => {
+                if (Net.conn && Net.conn.open) {
+                    Net.conn.send(data);
+                }
+            }
+        };
+
+        // --- 2. GAME LOGIC ---
+        const Game = {
+            canvas: Utils.id('gameCanvas'),
+            ctx: Utils.id('gameCanvas').getContext('2d'),
+
+            resize: () => {
+                Game.canvas.width = window.innerWidth;
+                Game.canvas.height = window.innerHeight;
+            },
+
+            hostRoom: () => {
+                const code = Utils.id('room-code').value.trim();
+                if (!code) return Utils.log("Digite um nome para a sala!", "orange");
+                
+                State.isHost = true;
+                Utils.id('room-code').disabled = true;
+                Utils.log("Iniciando servidor...", "yellow");
+                Net.init(code);
+            },
+
+            joinRoom: () => {
+                const code = Utils.id('room-code').value.trim();
+                if (!code) return Utils.log("Digite o ID da sala!", "orange");
+
+                State.isHost = false;
+                Utils.id('room-code').disabled = true;
+                Utils.log("Iniciando cliente...", "yellow");
+                Net.init(); // Init sem ID (gera random)
+                
+                // Pequeno delay para garantir que o Peer "abriu" antes de conectar
+                setTimeout(() => Net.connectTo(code), 1000);
+            },
+
+            waitForOpponent: () => {
+                Net.peer.on('connection', (conn) => {
+                    Net.setupConnection(conn);
+                });
+            },
+
+            handlePacket: (data) => {
+                switch(data.type) {
+                    case 'start':
+                        // Cliente recebe comando de start
+                        State.me.x = data.startX; 
+                        State.me.y = data.startY;
+                        // Inverte pos para inimigo
+                        State.enemy.x = 50; State.enemy.y = 300; 
+                        Game.start();
+                        break;
+                    case 'move':
+                        State.enemy.x = data.x;
+                        State.enemy.y = data.y;
+                        State.enemy.connected = true;
+                        break;
+                    case 'chat':
+                        Chat.add(data.msg, 'them');
+                        break;
+                    case 'full':
+                        alert("Sala cheia!");
+                        location.reload();
+                        break;
+                }
+            },
+
+            start: () => {
+                State.running = true;
+                State.enemy.connected = true;
+                Utils.id('ui-layer').style.display = 'none';
+                Utils.id('chat-wrapper').style.display = 'flex';
+                
+                if (Utils.isMobile()) {
+                    Utils.id('mobile-controls').style.display = 'block';
+                }
+
+                Chat.add("Conectado! Jogo Iniciado.", "sys");
+                Game.resize();
+                requestAnimationFrame(Game.loop);
+            },
+
+            resetUI: () => {
+                Utils.id('room-code').disabled = false;
+                if (Net.peer) Net.peer.destroy();
+                State.isHost = false;
+            },
+
+            update: () => {
+                if (!State.running) return;
+
+                let moved = false;
+                // Movimento
+                if (Input.keys.up && State.me.y > 0) { State.me.y -= Config.speed; moved = true; }
+                if (Input.keys.down && State.me.y < Game.canvas.height - Config.playerSize) { State.me.y += Config.speed; moved = true; }
+                if (Input.keys.left && State.me.x > 0) { State.me.x -= Config.speed; moved = true; }
+                if (Input.keys.right && State.me.x < Game.canvas.width - Config.playerSize) { State.me.x += Config.speed; moved = true; }
+
+                // Rede (Throttle para não floodar)
+                const now = Date.now();
+                if (moved && (now - State.lastSent > Config.tickRate)) {
+                    Net.send({ type: 'move', x: State.me.x, y: State.me.y });
+                    State.lastSent = now;
+                }
+            },
+
+            draw: () => {
+                const ctx = Game.ctx;
+                const w = Game.canvas.width;
+                const h = Game.canvas.height;
+
+                // Fundo
+                ctx.fillStyle = '#121212';
+                ctx.fillRect(0, 0, w, h);
+
+                // Grid
+                ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+                ctx.lineWidth = 1;
+                const gridSize = 50;
+                for(let x=0; x<w; x+=gridSize) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+                for(let y=0; y<h; y+=gridSize) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+
+                // Inimigo
+                if (State.enemy.connected) {
+                    ctx.fillStyle = State.enemy.color;
+                    ctx.shadowBlur = 10; ctx.shadowColor = State.enemy.color;
+                    ctx.fillRect(State.enemy.x, State.enemy.y, Config.playerSize, Config.playerSize);
+                    
+                    ctx.fillStyle = "white"; ctx.font = "12px Arial"; ctx.textAlign = "center"; ctx.shadowBlur = 0;
+                    ctx.fillText("Oponente", State.enemy.x + 20, State.enemy.y - 10);
+                }
+
+                // Eu
+                ctx.fillStyle = State.me.color;
+                ctx.shadowBlur = 10; ctx.shadowColor = State.me.color;
+                ctx.fillRect(State.me.x, State.me.y, Config.playerSize, Config.playerSize);
+                
+                ctx.fillStyle = "white"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center"; ctx.shadowBlur = 0;
+                ctx.fillText("Você", State.me.x + 20, State.me.y - 10);
+            },
+
+            loop: () => {
+                Game.update();
+                Game.draw();
+                if (State.running) requestAnimationFrame(Game.loop);
+            }
+        };
+
+        // --- 3. INPUT ---
+        const Input = {
+            keys: { up: false, down: false, left: false, right: false },
+            
+            init: () => {
+                window.addEventListener('keydown', (e) => Input.handle(e.key, true));
+                window.addEventListener('keyup', (e) => Input.handle(e.key, false));
+                window.addEventListener('resize', Game.resize);
+            },
+
+            handle: (key, pressed) => {
+                if(key === 'w' || key === 'ArrowUp') Input.keys.up = pressed;
+                if(key === 's' || key === 'ArrowDown') Input.keys.down = pressed;
+                if(key === 'a' || key === 'ArrowLeft') Input.keys.left = pressed;
+                if(key === 'd' || key === 'ArrowRight') Input.keys.right = pressed;
+            },
+
+            touch: (dir, pressed) => {
+                // Impede comportamento padrão de touch (scroll/zoom)
+                if (event) event.preventDefault();
+                Input.keys[dir] = pressed;
+            }
+        };
+
+        // --- 4. CHAT ---
+        const Chat = {
+            add: (msg, type) => {
+                const history = Utils.id('chat-history');
+                const p = document.createElement('p');
+                p.innerHTML = `<span class="${type}">${type === 'me' ? 'Eu' : (type === 'sys' ? 'Sistema' : 'Oponente')}:</span> ${msg}`;
+                history.appendChild(p);
+                history.scrollTop = history.scrollHeight;
+            },
+            
+            send: () => {
+                const input = Utils.id('chat-input');
+                const msg = input.value.trim();
+                if (!msg) return;
+                
+                Chat.add(msg, 'me');
+                Net.send({ type: 'chat', msg: msg });
+                input.value = '';
+                input.focus(); // Mantém foco no PC
+            }
+        };
+
+        // Inicialização
+        Input.init();
+
+    </script>
+</body>
+  </html>
+
